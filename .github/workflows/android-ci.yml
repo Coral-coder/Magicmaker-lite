@@ -1,0 +1,59 @@
+name: Android CI
+
+# Builds the app on every push and pull request so a broken build shows up as a red check.
+# No secrets or setup required.
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Stream the build (so a hung run is visible live) while keeping a copy, and on failure
+      # re-print the Kotlin compiler errors at the very end where they are easy to find.
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          set -o pipefail
+          if ! ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tee build.log; then
+            echo "===== compiler errors ====="
+            grep -E "^(e|w): " build.log | head -100 || true
+            exit 1
+          fi
+
+      # The compile check above is the point of this workflow; the APK itself is only a
+      # convenience download, so it is uploaded on manual runs and never fails the check.
+      - name: Upload debug APK
+        if: success() && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 3
