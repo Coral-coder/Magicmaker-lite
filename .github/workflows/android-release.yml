@@ -1,7 +1,8 @@
 name: Release APK
 
-# Publishes an installable APK as a GitHub Release. Push a version tag (v1.0.0) or run the
-# workflow manually with a version.
+# Publishes an installable APK as a GitHub Release. Cutting a release is a one-line change:
+# write the version into .github/RELEASE_VERSION and push. The workflow builds that version,
+# tags the commit and publishes the APK. A manual run can override the version.
 #
 # Signing: if the MM_KEYSTORE_* secrets are set, the release build is signed with that key and
 # published. Without them there is no key to sign with, so the debug-signed APK is published
@@ -10,12 +11,12 @@ name: Release APK
 
 on:
   push:
-    tags: ["v*"]
+    paths: [".github/RELEASE_VERSION"]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build and publish, e.g. v1.0.0"
-        required: true
+        description: "Version to build and publish, e.g. v1.0.0 (defaults to .github/RELEASE_VERSION)"
+        required: false
 
 permissions:
   contents: write
@@ -45,7 +46,13 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          tag="${{ github.event.inputs.version || github.ref_name }}"
+          # A manual run may name the version; otherwise it comes from the file.
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            tag="${{ github.event.inputs.version }}"
+          else
+            tag="$(tr -d '[:space:]' < .github/RELEASE_VERSION)"
+          fi
+          case "$tag" in v*) ;; *) tag="v$tag" ;; esac
           name="${tag#v}"
           # 1.2.3 -> 10203, so every published version sorts above the last one.
           code=$(echo "$name" | awk -F. '{printf "%d", ($1*10000)+($2*100)+$3}')
