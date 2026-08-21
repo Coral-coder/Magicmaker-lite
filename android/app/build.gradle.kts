@@ -17,8 +17,26 @@ android {
         versionName = (project.findProperty("mmVersionName") as String?) ?: "1.0.0"
     }
 
+    // A release APK is only installable if it is signed. The key never lives in the repo — it is
+    // supplied through env vars (CI secrets / a local keystore), and without them the release
+    // build stays unsigned and CI publishes the debug APK instead.
+    signingConfigs {
+        create("release") {
+            val storePath = System.getenv("MM_KEYSTORE_FILE")
+            if (!storePath.isNullOrBlank() && file(storePath).exists()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("MM_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("MM_KEY_ALIAS")
+                keyPassword = System.getenv("MM_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (!System.getenv("MM_KEYSTORE_FILE").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
